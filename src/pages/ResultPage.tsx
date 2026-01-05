@@ -29,7 +29,7 @@ export default function ResultPage() {
     { level: 5, title: "Réagir", completed: gameState.completedLevels.includes(5) },
   ];
 
-  // Save results to database and send email when page loads
+  // Sauvegarde + envoi des résultats
   useEffect(() => {
     const saveAndSendResults = async () => {
       if (!gameState.studentInfo || emailSent || sendingEmail) return;
@@ -37,7 +37,7 @@ export default function ResultPage() {
       setSendingEmail(true);
       
       try {
-        // First, save to database
+        // 1. Sauvegarde dans Supabase
         const durationSeconds = gameState.startTime
           ? Math.round((Date.now() - gameState.startTime) / 1000)
           : null;
@@ -63,12 +63,10 @@ export default function ResultPage() {
           });
 
         if (dbError) {
-          console.error('Error saving to database:', dbError);
-        } else {
-          console.log('Results saved to database');
+          console.error('Erreur sauvegarde BDD:', dbError);
         }
 
-        // Then, try to send email
+        // 2. Envoi d’e-mail via Vercel API (Gmail)
         const studentResult = {
           nom: gameState.studentInfo.nom,
           prenom: gameState.studentInfo.prenom,
@@ -81,35 +79,34 @@ export default function ResultPage() {
           levelResults,
         };
 
-        const { data, error } = await supabase.functions.invoke('send-results-email', {
-          body: {
+        const response = await fetch('/api/send-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
             professorEmail: gameState.studentInfo.professorEmail,
             studentResult,
-          },
+          }),
         });
 
-        if (error) {
-          console.error('Error sending email:', error);
-          toast.error('Email non envoyé (limitation Resend). Résultats sauvegardés en base.');
-        } else if (data?.data?.statusCode === 403) {
-          // Resend domain verification error
-          console.warn('Resend domain not verified:', data.data.message);
-          toast.warning('Email non envoyé (domaine non vérifié). Résultats sauvegardés en base.');
-          setEmailSent(false);
-        } else {
-          console.log('Email sent successfully:', data);
+        const result = await response.json();
+
+        if (result.success) {
           setEmailSent(true);
           toast.success('Résultats envoyés au professeur !');
+        } else {
+          toast.error('Email non envoyé. Résultats sauvegardés en base.');
+          console.error('Erreur API:', result.error);
         }
       } catch (error) {
-        console.error('Error:', error);
-        toast.error('Erreur. Résultats sauvegardés en base.');
+        console.error('Erreur globale:', error);
+        toast.error('Erreur inattendue. Résultats sauvegardés.');
       } finally {
         setSendingEmail(false);
       }
     };
 
     saveAndSendResults();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameState.studentInfo]);
 
   const handleRestart = () => {
