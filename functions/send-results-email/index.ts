@@ -1,65 +1,52 @@
-// functions/send-results-email/index.ts
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import nodemailer from 'https://esm.sh/nodemailer@6.9.13';
+// api/send-email.ts
+import nodemailer from 'nodemailer';
 
-serve(async (req) => {
-  try {
-    // Vérifie la méthode
-    if (req.method !== 'POST') {
-      return new Response(JSON.stringify({ error: 'POST only' }), {
-        status: 405,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    const { professorEmail, studentResult } = await req.json();
-
-    // Validation
-    if (!professorEmail || !studentResult) {
-      return new Response(JSON.stringify({ error: 'Données manquantes' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: Deno.env.get('EMAIL_USER'),
-        pass: Deno.env.get('EMAIL_PASS'),
-      },
+export default async function handler(req: Request, res: Response) {
+  if (req.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Méthode non autorisée' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json' },
     });
+  }
 
-    const mailOptions = {
-      from: Deno.env.get('EMAIL_USER'),
-      to: professorEmail,
-      subject: `Résultats ISET - ${studentResult.prenom} ${studentResult.nom}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 20px auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
-          <h2 style="color: #2563eb;">🎯 Résultats du jeu d'entraînement</h2>
-          <p><strong>Étudiant :</strong> ${studentResult.prenom} ${studentResult.nom}</p>
-          <p><strong>Spécialité :</strong> ${studentResult.specialite}</p>
-          <p><strong>Score :</strong> ${studentResult.score}%</p>
-          <p><strong>Niveaux complétés :</strong> ${studentResult.completedLevels.join(', ')}</p>
-          <hr style="margin: 16px 0;">
-          <p style="color: #64748b; font-size: 0.875rem;">
-            Ce message a été envoyé automatiquement par le jeu web de l'ISET.
-          </p>
-        </div>
-      `,
-    };
+  const body = await req.json();
+  const { professorEmail, studentResult } = body;
 
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER!,   // isetentretien499@gmail.com
+      pass: process.env.EMAIL_PASS!,   // mot de passe d’application
+    },
+  });
+
+  const mailOptions = {
+    from: process.env.EMAIL_USER,
+    to: professorEmail,
+    subject: `Résultats ISET - ${studentResult.prenom} ${studentResult.nom}`,
+    html: `
+      <div style="font-family: Arial; max-width: 600px; margin: 20px auto;">
+        <h2>🎯 Résultats du jeu d'entraînement ISET</h2>
+        <p><strong>Étudiant :</strong> ${studentResult.prenom} ${studentResult.nom}</p>
+        <p><strong>Spécialité :</strong> ${studentResult.specialite}</p>
+        <p><strong>Score :</strong> ${studentResult.score}%</p>
+        <hr>
+        <p><em>Projet étudiant - ISET</em></p>
+      </div>
+    `,
+  };
+
+  try {
     await transporter.sendMail(mailOptions);
-
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (error: any) {
-    console.error('Erreur Edge Function:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    console.error('Erreur d’envoi:', error);
+    return new Response(JSON.stringify({ success: false, error: error.message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });
   }
-});
+}
